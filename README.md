@@ -13,5 +13,7 @@ To install the program, run the following command to open the crontab configurat
     $ sudo crontab -e
   ```
 Add the following line at the end of the file:
-  ```* * * * * /usr/local/bin/dropcaches```
+  ```
+  * * * * * /usr/local/bin/dropcaches
+  ```
 This will cause the program to run every minute, freeing up swap memory to improve system performance.
