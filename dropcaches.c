@@ -121,7 +121,9 @@ int main() {
                 // Check if file operations or system update is running
                 if (isFileOperationRunning()) {
                     syslog(LOG_INFO, "File operations. Skipping swap clearance.");
-                } else if (isSystemUpdating()) {
+                } else if (processIsRunning("modprobe")) {
+                    syslog(LOG_INFO, "Steam Vulkan shader caching. Skipping swap clearance.");
+                }  else if (isSystemUpdating()) {
                     syslog(LOG_INFO, "System update in progress. Skipping swap clearance.");
                 } else {
                     // Free swap
