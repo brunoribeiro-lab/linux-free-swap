@@ -5,7 +5,8 @@ To compile the program, follow these steps:
   ```shell
     $ git clone https://github.com/brunoribeiro-lab/linux-free-swap # (or use the ssh link)
     $ cd linux-free-swap/
-    $ sudo gcc dropcaches.c -o /usr/local/bin/dropcaches
+    $ make clean && make
+    $ sudo cp dropcaches -o /usr/local/bin/dropcaches
   ```
 # Installation
 To install the program, run the following command to open the crontab configuration file:
