@@ -3,10 +3,11 @@ This is a simple program for RAM optimization on Linux. With it, it is possible 
 # Compilation
 To compile the program, follow these steps:
   ```shell
+    $ sudo apt-get install libc6-dev
     $ git clone https://github.com/brunoribeiro-lab/linux-free-swap # (or use the ssh link)
     $ cd linux-free-swap/
     $ make clean && make
-    $ sudo cp dropcaches -o /usr/local/bin/dropcaches
+    $ sudo cp dropcaches /usr/local/bin/dropcaches
   ```
 # Installation
 To install the program, run the following command to open the crontab configuration file:
