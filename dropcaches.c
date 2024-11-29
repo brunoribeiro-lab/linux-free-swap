@@ -4,69 +4,82 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
-#include <dirent.h>
 #include <syslog.h>
-#include <ctype.h>
-#include "src/updateSystem.h"
-#include "src/fileOperationRunning.h"
-#include "src/processRunning.h"
-#include "src/swap.h"
+#include <sys/stat.h>
+#include "src/cache/include/cache.h"
+#include "src/config/include/config.h"
+#include "src/process/include/fileOperationRunning.h"
+#include "src/updateSystem/include/updateSystem.h"
+#include "src/process/include/processRunning.h"
+#include "src/swap/include/swap.h"
+#include "src/utils/include/ini.h"
 
-int main() {
-    // Open syslog with desired options
-    openlog("SwapClearance", LOG_PID | LOG_CONS, LOG_USER);
-    bool debug = false;
-    struct sysinfo info;
-    if (sysinfo(&info) == 0) {
-        if(debug){
-            syslog(LOG_INFO, "Free RAM: %lu bytes", info.freeram);
-            syslog(LOG_INFO, "Buffered RAM: %lu bytes", info.bufferram);
-        }
-        if (info.totalswap > 0) {
-            if(debug){
-                syslog(LOG_INFO, "Swap: %lu bytes", info.totalswap);
-            }
-            // Check if swap is in use
-            if (isSwapInUse()) {
-                // Check if file operations or system update is running
-                if (isFileOperationRunning()) {
-                    if(debug){
-                        syslog(LOG_INFO, "File operations. Skipping swap clearance.");
-                    }
-                } else if (processIsRunning("modprobe")) {
-                    if(debug){
-                        syslog(LOG_INFO, "Steam Vulkan shader caching. Skipping swap clearance.");
-                    }
-                }  else if (isSystemUpdating()) {
-                    if(debug){
-                        syslog(LOG_INFO, "System update in progress. Skipping swap clearance.");
-                    }
-                } else {
-                    // Free swap
-                    if (getuid() == 0) {
-                        if(!debug){
-                            syslog(LOG_INFO, "Free RAM: %lu bytes", info.freeram);
-                            syslog(LOG_INFO, "Buffered RAM: %lu bytes", info.bufferram);
-                        }
-                        syslog(LOG_INFO, "Clearing swap...");
-                        system("/bin/echo 3 > /proc/sys/vm/drop_caches && swapoff -a && swapon -a");
-                        syslog(LOG_INFO, "Swap cleared!");
-                    } else if(debug) {
-                        syslog(LOG_INFO, "You must have root privileges to clear the swap.");
-                    }
-                }
-            } else if(debug) {
-                syslog(LOG_INFO, "No swap space in use.");
-            }
-        } else if(debug) {
-            syslog(LOG_INFO, "No swap space available.");
-        }
-    } else if(debug) {
-        syslog(LOG_ERR, "Error getting system information.");
+extern bool debug;
+extern int cache_ram_threshold, sleep_time;
+
+int main()
+{
+    printf("Starting...\n");
+
+    // Check if config file exists
+    struct stat buffer;
+    if (stat(CONFIG_FILE, &buffer) != 0)
+    {
+        printf("Config not found. Creating default.\n");
+        create_default_config();
     }
 
-    // Close syslog
-    closelog();
+    // Load config settings
+    if (ini_parse(CONFIG_FILE, config_handler, NULL) < 0)
+        printf("Error loading config. Using defaults.\n");
 
+    // Display config settings
+    printf("Debug: %s\nCache RAM Threshold: %d%%\nSleep time: %d seconds\n", debug ? "Enabled" : "Disabled", cache_ram_threshold, sleep_time);
+
+    openlog("SwapClearance", LOG_PID | LOG_CONS, LOG_USER);
+
+    while (true)
+    {
+        struct sysinfo info;
+        if (sysinfo(&info) == 0)
+        {
+            if (cache_ram_threshold > 0 && isCacheThresholdExceeded(&info))
+            {
+                if (debug)
+                    syslog(LOG_INFO, "Cache exceeded! %.2f%% > %d%%", (double)(info.bufferram + get_cached_memory()) / info.totalram * 100, cache_ram_threshold);
+
+                if (getuid() == 0)
+                {
+                    syslog(LOG_INFO, "Clearing cached RAM...");
+                    if (system("/bin/echo 3 > /proc/sys/vm/drop_caches") == 0)
+                        syslog(LOG_INFO, "Cached RAM cleared!");
+                    else syslog(LOG_ERR, "Error clearing cached RAM.");
+                }
+                else if (debug) syslog(LOG_INFO, "Root required to clear cached RAM.");
+            }
+            else if (debug) syslog(LOG_INFO, "Cache RAM below threshold.");
+
+            if (info.totalswap > 0 && isSwapInUse())
+            {
+                if (!isFileOperationRunning() && !processIsRunning("modprobe") && !isSystemUpdating())
+                {
+                    if (getuid() == 0)
+                    {
+                        syslog(LOG_INFO, "Clearing swap...");
+                        system("swapoff -a && swapon -a");
+                        syslog(LOG_INFO, "Swap cleared!");
+                    }
+                    else if (debug) syslog(LOG_INFO, "Root required to clear swap.");
+                }
+                else if (debug) syslog(LOG_INFO, "Conditions not met to clear swap.");
+            }
+            else if (debug) syslog(LOG_INFO, "No swap in use or available.");
+        }
+        else if (debug) syslog(LOG_ERR, "Error getting system info.");
+
+        sleep(sleep_time);
+    }
+
+    closelog();
     return 0;
 }

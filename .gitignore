@@ -1,0 +1,6 @@
+.git
+.vscode
+./*.o
+*.zip
+*.gz
+/bin*
